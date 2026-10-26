@@ -1,0 +1,58 @@
+x-backend: &backend
+  build: ./backend
+  env_file: .env
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: mailup
+      POSTGRES_PASSWORD: mailup
+      POSTGRES_DB: mailup
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mailup"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  backend:
+    <<: *backend
+    ports: ["8000:8000"]
+
+  # Runs Gmail sync and classification tasks.
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
+
+  # Schedules the Gmail poll every minute.
+  beat:
+    <<: *backend
+    command: ["celery", "-A", "app.worker", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+
+  # Optional local AI in a container: docker compose --profile ollama up
+  # (then set OLLAMA_URL=http://ollama:11434). Installing Ollama on Windows directly is faster.
+  ollama:
+    image: ollama/ollama:0.40.10
+    profiles: ["ollama"]
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
+  frontend:
+    build: ./frontend
+    env_file: .env
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+volumes:
+  pgdata:
+  ollama:
