@@ -33,13 +33,29 @@ def redact(text: str) -> str:
     return text
 
 
+def _redact_arg(value):
+    # Numbers stay numbers for %d-style formats; anything else may stringify to a secret.
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return redact(str(value))
+
+
 class RedactingFilter(logging.Filter):
-    """Redacts secrets from the message and traceback, and adds the current request id."""
+    """Redacts secrets from the message, its arguments and the traceback, and adds the request id.
+
+    Arguments are redacted one by one rather than merged into the message, because some
+    formatters (uvicorn's access log) read them individually.
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "request_id"):
             record.request_id = request_id_var.get()
-        record.msg, record.args = redact(record.getMessage()), None
+        if isinstance(record.msg, str):
+            record.msg = redact(record.msg)
+        if isinstance(record.args, dict):
+            record.args = {key: _redact_arg(value) for key, value in record.args.items()}
+        elif record.args:
+            record.args = tuple(_redact_arg(value) for value in record.args)
         if record.exc_info and not record.exc_text:
             record.exc_text = logging.Formatter().formatException(record.exc_info)
         if record.exc_text:

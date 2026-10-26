@@ -112,6 +112,28 @@ Each phase ships working, tested functionality end to end.
   every chart
 - No calendar events and no email notifications (Specify never sends email)
 
-## Phase 8: Security and testing
-Permission audit, Supabase RLS, data export and deletion, retention policy for stored email
-content, end-to-end scenarios A and E, production deployment and backup docs.
+## Phase 8: Security and testing ✅
+
+- Permission audit: a test walks every API route and requires a session, with a short, explained
+  list of public endpoints (it found and closed one unauthenticated endpoint)
+- PostgreSQL row-level security through an optional restricted role for user requests; policies
+  re-applied on every start; the whole test suite also runs through that role on PostgreSQL
+- HTTP hardening: security headers, `Origin` check for writes, request ids, generic error
+  responses; secrets redacted from API and worker logs
+- Privacy: email text retention (default 365 days), full data export as JSON, account deletion
+  that revokes Google access; Settings → Privacy & security
+- Gmail push notifications through Pub/Sub (optional), with verification of Google-signed
+  requests and automatic watch renewal; polling remains the fallback (deferred from Phase 2)
+- End-to-end tests for the specification's scenarios A–F
+- Running the suite on PostgreSQL found a column too short for draft tones, which SQLite had
+  hidden; fixed in migration 0007
+- Docs: [SECURITY.md](SECURITY.md), [DEPLOYMENT.md](DEPLOYMENT.md) (production, backup and
+  recovery, troubleshooting), Pub/Sub setup in [GOOGLE_SETUP.md](GOOGLE_SETUP.md)
+
+## Not yet built
+
+- Gmail actions beyond labels and drafts (archive, star, mark read, trash). The `gmail.modify`
+  scope already allows them; each would need its own switch and audit trail.
+- Linking a Specify label to an existing Gmail label, and merging two labels.
+- Applying labels to emails already processed after Gmail labeling is switched back on.
+- Calendar events and email notifications (excluded by the specification's Draft Only rule).

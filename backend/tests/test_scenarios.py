@@ -3,8 +3,6 @@
 Each test follows one scenario step by step: mail arrives through a Gmail sync, the default
 workflow runs (background tasks run inline), and the outcome is checked where the user sees it.
 """
-import logging
-
 import pytest
 from sqlalchemy import func, select
 
@@ -154,11 +152,10 @@ def test_scenario_d_duplicate_events(specify, db, fake_gmail):
     assert _count(db, EmailDraft) == 1 and len(fake_gmail.drafts) == 1
 
 
-def test_scenario_e_failed_synchronization(specify, db, fake_gmail, fake_sheets, caplog):
+def test_scenario_e_failed_synchronization(specify, db, fake_gmail, fake_sheets):
     # 1. Google Sheets becomes temporarily unavailable.
     fake_sheets.fail_with = GoogleRetryableError("Google Sheets is temporarily unavailable (HTTP 503).")
-    with caplog.at_level(logging.INFO):
-        _receive(specify, fake_gmail)
+    _receive(specify, fake_gmail)
 
     # 2. Specify keeps its own changes.
     opportunity = db.scalar(select(Opportunity))

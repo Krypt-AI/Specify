@@ -5,17 +5,24 @@
 ```
 backend/              FastAPI service and Celery worker
   app/api/            HTTP routes (thin: validate, authorize, delegate)
+  app/core/           Settings, signing and encryption, HTTP hardening, log redaction
+  app/db/             Engines and sessions (owner and restricted), row-level security setup
   app/services/       Domain and integration logic
-    gmail/            REST client, parser, sync, Gmail label mirroring
+    gmail/            REST client, parser, sync, Gmail label mirroring, push notifications
     classification/   Rule signals, AI classifier, processing pipeline
     recruitment/      Extraction, grounding checks, record matching, decisions
     labels.py         Context-label naming and dedupe
+    sheets/           Sheets client, column mapping, two-way sync and conflicts
+    drafting/         Reply scenarios, generation, quality checks, Gmail drafts
+    workflows/        Step catalogue, executors, engine, default workflow
+    privacy.py        Retention, export, account deletion
     llm.py            AI providers (Ollama, Anthropic) behind one interface
   app/models/         SQLAlchemy models; every user-owned row carries user_id
   app/schemas/        Pydantic request/response contracts and validated preferences
   app/worker.py       Celery app and beat schedule
   app/tasks.py        Thin background tasks
   alembic/            Versioned migrations
+  sql/                Row-level security policies (applied by app/db/rls.py)
 frontend/             React + TypeScript + Vite + Tailwind
   src/api/            Typed API contracts and TanStack Query hooks, one module per resource
   src/components/     UI primitives (ui/), email views (email/), settings sections (settings/)
@@ -26,7 +33,7 @@ docs/                 Setup, architecture, roadmap
 ## Email pipeline
 
 ```
-Gmail ──poll / manual──▶ sync_mailbox ──new email ids──▶ process_email (one task per email)
+Gmail ──poll / push / manual──▶ sync_mailbox ──new email ids──▶ process_email (one task per email)
   (history API, lease)       │                               │
                              ▼                               ├─ rules decide the folder
                        email_messages                        ├─ Claude: folder, label, flags
@@ -72,10 +79,14 @@ abandoned by a dead worker and work queued for too long.
 | Typed preferences (`UserPreferences`) with deep-merge updates | Every setting is validated (timezones, thresholds, lists). Partial updates cannot wipe other sections. |
 | Synchronous SQLAlchemy; background work in Celery | Simple code. Long work never runs in a request, and the API only enqueues it. |
 | Tests run tasks eagerly against fakes | `CELERY_TASK_ALWAYS_EAGER` and in-memory Gmail and AI fakes exercise the full pipeline without Redis or network. |
+| Optional row-level security through a second, restricted database role | Isolation no longer depends only on every query remembering its user filter. Workers and sign-in keep the owner role because they act for the system. The policy script is idempotent and re-applied on every start, and a test fails when a new table has no policy. |
+| CSRF: `SameSite=Lax` plus an `Origin` allow-list for writes | Lax already stops cross-site form posts. The Origin check also covers same-site subdomains and old browsers. No token plumbing is needed in the frontend. |
+| Retention removes email text, not the email record | Folders, labels and opportunities keep working, the full email stays in Gmail, and the most sensitive content (the body) does not pile up. |
+| Push notifications only start a sync | A webhook never carries data Specify trusts. It names a mailbox, and the normal history sync does the rest, so polling and push share one code path. |
 | UI primitives written in the shadcn/ui style | Same ownership model without CLI scaffolding. Radix primitives will be added when dialogs and menus are needed. |
 
 ## Supabase
 
-The schema is plain PostgreSQL, so `DATABASE_URL` can point at Supabase. The backend enforces
-per-user isolation in every query. Row Level Security policies are added in Phase 8 as defence in
-depth.
+The schema is plain PostgreSQL, so `DATABASE_URL` can point at Supabase (use the direct
+connection string as the owner). The row-level security script works there unchanged. Set
+`REQUEST_DATABASE_URL` for the `specify_app` role ([SECURITY.md](SECURITY.md#row-level-security)).

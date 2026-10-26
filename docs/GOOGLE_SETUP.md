@@ -42,7 +42,7 @@ makes the consent screen list them, and Google requires it before it will verify
 | --- | --- | --- |
 | Sign-in | `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` | Identify you and create your account. |
 | Gmail | `https://www.googleapis.com/auth/gmail.modify` | Read messages to classify them, create `Specify/*` labels and apply them to messages, and create reply drafts. |
-| Sheets | `https://www.googleapis.com/auth/spreadsheets` | Read and write the tracking spreadsheet you select (used from Phase 4). |
+| Sheets | `https://www.googleapis.com/auth/spreadsheets` | Read and write the tracking spreadsheet you select. |
 
 **Why `gmail.modify`.** Applying labels to messages requires it. `gmail.labels` can only manage the
 labels themselves. `gmail.modify` also covers reading messages and creating drafts, so Specify needs
@@ -65,5 +65,35 @@ spreadsheet you select.
   click through for your own account. Opening Specify to other people requires Google's
   verification and, for restricted scopes, a security assessment.
 
-Pub/Sub push notifications will add their own setup section here. Until then Specify polls Gmail
-on a schedule.
+## Gmail push notifications (optional)
+
+By default Specify polls Gmail every few minutes (Settings → Gmail). With push notifications,
+Gmail tells Specify about new mail within seconds. Polling keeps running underneath, so a missed
+notification only delays a sync. Push needs a backend reachable from the internet over HTTPS,
+so it is for production deployments ([DEPLOYMENT.md](DEPLOYMENT.md)), not `localhost`.
+
+1. **Enable the Cloud Pub/Sub API** (APIs & Services → Library → *Cloud Pub/Sub API*).
+2. **Create a topic** (Pub/Sub → Topics → Create topic), for example `specify-gmail`. Leave
+   *Add a default subscription* unticked.
+3. **Let Gmail publish to it.** On the topic's *Permissions* tab, add the principal
+   `gmail-api-push@system.gserviceaccount.com` with the role *Pub/Sub Publisher*.
+4. **Create a service account** that signs the push requests (IAM & Admin → Service accounts),
+   for example `specify-push`. It needs no roles and no keys.
+5. **Create a push subscription** (Pub/Sub → Subscriptions → Create subscription) on the topic:
+   - Delivery type: *Push*. Endpoint URL: `${BACKEND_URL}/api/webhooks/gmail`.
+   - Tick *Enable authentication*, choose the `specify-push` service account, and set the
+     audience to the same endpoint URL. If the console asks, allow the Pub/Sub service agent
+     to create tokens for that service account.
+   - Acknowledgement deadline: 30 seconds. Retry policy: *Retry after exponential backoff delay*.
+6. **Configure Specify** in `.env`:
+   ```
+   GMAIL_PUBSUB_TOPIC=projects/<project-id>/topics/specify-gmail
+   GMAIL_PUSH_AUDIENCE=https://<your-backend>/api/webhooks/gmail
+   GMAIL_PUSH_SERVICE_ACCOUNT=specify-push@<project-id>.iam.gserviceaccount.com
+   ```
+   Restart the backend and worker. Each mailbox starts its watch at its next sync and renews it
+   before Gmail's seven-day expiry.
+
+Specify accepts a push only when it carries a token signed by Google for that audience and
+service account. Anything else is rejected with HTTP 401. A push only starts a sync of the
+mailbox it names, so a forged request could at most make Specify check Gmail early.

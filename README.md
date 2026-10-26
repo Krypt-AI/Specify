@@ -3,10 +3,12 @@
 An email management and recruitment workflow assistant. Specify connects to Gmail, sorts every
 email into Recruitment, University, Certifications or Other, and labels it in Gmail with a label
 the AI names from the email's context. It turns recruitment emails into company and opportunity
-records and keeps a decision queue for you. Google Sheets sync and reply drafts follow in later
-phases. Specify never sends email without your authorization.
+records, keeps a decision queue, writes reply drafts in Gmail for the decisions you make, keeps a
+Google Sheets tracker in sync, and reminds you of deadlines, exams and follow-ups. Workflows run
+every step and can be edited in a visual builder. **Specify never sends email.** It only saves
+drafts, and you send them from Gmail.
 
-**Status:** Phases 1–3 (Foundation, Gmail integration, Recruitment management) are complete. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status:** all eight phases are complete. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 **AI runs locally by default** with Ollama, so email text never leaves your computer. Claude is
 available as an alternative. See [docs/AI_SETUP.md](docs/AI_SETUP.md).
@@ -20,7 +22,7 @@ available as an alternative. See [docs/AI_SETUP.md](docs/AI_SETUP.md).
 3. `docker compose up --build` starts Postgres, Redis, the API, the worker, the scheduler and the frontend.
 4. Open http://localhost:5173, sign in, and connect Gmail. The first sync starts immediately.
 
-The backend runs migrations on start. API docs are at http://localhost:8000/docs.
+The backend runs migrations on start. API docs are at http://localhost:8000/docs (development only).
 
 ## Local development (without Docker)
 
@@ -66,15 +68,20 @@ This is for debugging only: requests then wait for sync and classification to fi
 ## Tests and checks
 
 ```bash
-cd backend && python -m pytest        # in-memory SQLite; Gmail and the AI are replaced by fakes
+cd backend && python -m pytest        # in-memory SQLite; Gmail, Sheets and the AI are replaced by fakes
 cd frontend && npm run build && npm run lint
 ```
+
+`tests/test_scenarios.py` walks through the specification's acceptance scenarios A–F end to end.
+The same suite also runs on PostgreSQL with row-level security on ([docs/SECURITY.md](docs/SECURITY.md#row-level-security)).
 
 ## Documentation
 
 - [Architecture and design decisions](docs/ARCHITECTURE.md)
 - [Google Cloud setup and OAuth scopes](docs/GOOGLE_SETUP.md)
 - [AI setup (Ollama or Claude)](docs/AI_SETUP.md)
+- [Security and privacy](docs/SECURITY.md)
+- [Production deployment, backup and troubleshooting](docs/DEPLOYMENT.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Dependency versions (verified)

@@ -108,3 +108,13 @@ def test_log_filter_redacts_arguments_and_tracebacks():
     assert "secret" not in record.getMessage()
     assert "secret" not in record.exc_text
     assert record.request_id == "-"
+
+
+def test_server_access_log_still_formats_after_redaction():
+    from uvicorn.logging import AccessFormatter
+
+    args = ("127.0.0.1:5000", "GET", "/api/auth/google/callback?code=4/0secret&state=abc", "1.1", 302)
+    record = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d', args, None)
+    RedactingFilter().filter(record)
+    line = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False).format(record)
+    assert "callback?code=[redacted]&state=[redacted]" in line and "302" in line

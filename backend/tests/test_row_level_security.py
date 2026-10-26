@@ -40,6 +40,8 @@ def postgres():
     url = os.environ.get("TEST_POSTGRES_URL")
     if not url:
         pytest.skip("TEST_POSTGRES_URL is not set")
+    if url == os.environ.get("TEST_DATABASE_URL"):
+        pytest.skip("TEST_POSTGRES_URL must not be the suite's own database: these tests drop its tables")
     owner = create_engine(url)
     Base.metadata.drop_all(owner)
     Base.metadata.create_all(owner)
